@@ -236,9 +236,106 @@
     }
   });
 </script>
+<script type="module">
+  // 1. Importações dos módulos do Firebase
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  // 2. CONFIGURAÇÃO (Substitua pelos seus dados da imagem image_234fdd.png)
+  const firebaseConfig = {
+    apiKey: "SUA_API_KEY_AQUI",
+    authDomain: "SEU_PROJETO.firebaseapp.com",
+    projectId: "SEU_PROJETO",
+    storageBucket: "SEU_PROJETO.appspot.com",
+    messagingSenderId: "SEU_ID",
+    appId: "SEU_APP_ID"
+  };
+
+  // 3. Inicialização do Firebase
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  // --- FUNÇÕES DE INTERFACE ---
+
+  // Função para Logar
+  window.fazerLogin = async () => {
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Erro no login:", error);
+      alert("Erro ao logar com Google.");
+    }
+  };
+
+  // Função para Sair (Logout)
+  window.fazerLogout = () => {
+    signOut(auth).then(() => {
+      location.reload(); // Recarrega a página ao sair
+    });
+  };
+
+  // --- FUNÇÕES DE BANCO DE DADOS (Firestore) ---
+
+  // Função para SALVAR dados (Substitui o localStorage.setItem)
+  window.salvarNoFirebase = async (dados) => {
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        await setDoc(doc(db, "usuarios", user.uid), {
+          meusAgendamentos: dados,
+          ultimaAtualizacao: new Date()
+        });
+        console.log("Dados sincronizados na nuvem!");
+      } catch (e) {
+        console.error("Erro ao salvar dados:", e);
+      }
+    }
+  };
+
+  // Função para BUSCAR dados (Substitui o localStorage.getItem)
+  window.carregarDoFirebase = async () => {
+    const user = auth.currentUser;
+    if (user) {
+      const docRef = doc(db, "usuarios", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const dadosVindosDaNuvem = docSnap.data().meusAgendamentos;
+        console.log("Dados carregados da nuvem.");
+        
+        // AQUI: Chame a função que você já tem para desenhar a tabela
+        // Exemplo: mostrarAgendamentosNaTela(dadosVindosDaNuvem);
+        return dadosVindosDaNuvem;
+      }
+    }
+    return null;
+  };
+
+  // --- MONITOR DE STATUS (Executa automaticamente) ---
+  onAuthStateChanged(auth, async (user) => {
+    const btnLogin = document.getElementById('btn-login');
+    const userInfo = document.getElementById('user-info'); // Se você tiver um <p> com esse ID
+
+    if (user) {
+      console.log("Usuário logado:", user.displayName);
+      if (btnLogin) btnLogin.style.display = 'none';
+      if (userInfo) userInfo.innerText = `Olá, ${user.displayName}`;
+      
+      // Busca os dados assim que logar
+      await window.carregarDoFirebase();
+    } else {
+      console.log("Nenhum usuário logado.");
+      if (btnLogin) btnLogin.style.display = 'block';
+    }
+  });
+</script>
 </body>
 </script>
 </html>
+
 
 
 
