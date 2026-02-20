@@ -2,7 +2,7 @@
   "name": "Meu Agendador Offline",
   "short_name": "Agenda",
   "description": "App de agendamentos com funcionamento offline e detecção de conflitos.",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4A90E2",
@@ -21,3 +21,4 @@
   ]
 
 }
+
