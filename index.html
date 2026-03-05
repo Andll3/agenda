@@ -24,11 +24,16 @@
         }
         h2 { margin-top: 0; color: #222; font-size: 1.6rem; }
         label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
-        input { 
+        
+        input, textarea { 
             width: 100%; padding: 15px; margin-bottom: 20px; 
             border: 2px solid #ddd; border-radius: 10px; 
-            box-sizing: border-box; font-size: 18px; 
+            box-sizing: border-box; font-size: 18px;
+            font-family: inherit;
         }
+
+        textarea { resize: vertical; min-height: 80px; }
+
         .btn-salvar { 
             background: #28a745; color: white; border: none; 
             width: 100%; padding: 20px; border-radius: 10px; 
@@ -45,6 +50,9 @@
             display: flex; justify-content: space-between; align-items: center;
             box-shadow: 0 4px 8px rgba(0,0,0,0.05);
         }
+        .info-texto { flex: 1; margin-right: 10px; }
+        .obs-texto { color: #666; font-size: 0.9rem; display: block; margin-top: 5px; font-style: italic; }
+        
         .btn-excluir { 
             background: #dc3545; color: white; border: none; 
             padding: 12px 20px; border-radius: 8px; font-weight: bold;
@@ -71,6 +79,9 @@
         
         <label>Horário</label>
         <input type="time" id="hora">
+
+        <label>Observação</label>
+        <textarea id="obs" placeholder="Algum detalhe importante?"></textarea>
         
         <button class="btn-salvar" onclick="tentarSalvar()">Confirmar Agendamento</button>
     </div>
@@ -83,7 +94,6 @@
         import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Configuração do seu Firebase (Verificada conforme suas imagens)
         const firebaseConfig = {
             apiKey: "AIzaSyAK6-MYxY52ONgx6huRJgM1h3dkTLbd0ZU",
             authDomain: "agendamento-web-f99e0.firebaseapp.com",
@@ -101,7 +111,13 @@
 
         let db_local;
 
-        // --- BANCO LOCAL (IndexedDB) ---
+        // Função para formatar data de AAAA-MM-DD para DD/MM/AAAA
+        function formatarDataBR(dataISO) {
+            if(!dataISO) return "";
+            const [ano, mes, dia] = dataISO.split('-');
+            return `${dia}/${mes}/${ano}`;
+        }
+
         const request = indexedDB.open("AgendamentosDB", 1);
         request.onupgradeneeded = (e) => {
             db_local = e.target.result;
@@ -115,7 +131,6 @@
             atualizarLista();
         };
 
-        // --- FUNÇÕES DE LOGIN ---
         window.fazerLogin = async () => {
             try { await signInWithPopup(auth, provider); } 
             catch (e) { console.error(e); alert("Erro ao logar."); }
@@ -125,15 +140,12 @@
             signOut(auth).then(() => location.reload());
         };
 
-        // --- SINCRONIZAÇÃO ---
         window.sincronizarComNuvem = async () => {
             const user = auth.currentUser;
             if (!user) return;
-
             const tx = db_local.transaction("agendamentos", "readonly");
             const store = tx.objectStore("agendamentos");
             const requestAll = store.getAll();
-
             requestAll.onsuccess = async () => {
                 const todos = requestAll.result;
                 try {
@@ -141,7 +153,6 @@
                         agendamentos: todos,
                         atualizadoEm: new Date()
                     });
-                    console.log("Nuvem atualizada!");
                 } catch (e) { console.error("Erro nuvem:", e); }
             };
         };
@@ -153,33 +164,33 @@
                 const dados = docSnap.data().agendamentos;
                 const tx = db_local.transaction("agendamentos", "readwrite");
                 const store = tx.objectStore("agendamentos");
-                store.clear(); // Limpa local para receber o da nuvem
+                store.clear();
                 dados.forEach(item => {
-                    delete item.id; // Deixa o autoIncrement local agir
+                    delete item.id;
                     store.add(item);
                 });
                 tx.oncomplete = () => atualizarLista();
             }
         };
 
-        // --- LÓGICA DE AGENDAMENTO ---
         window.tentarSalvar = function() {
             const valItem = document.getElementById('item').value;
             const valData = document.getElementById('data').value;
             const valHora = document.getElementById('hora').value;
+            const valObs = document.getElementById('obs').value;
 
             if (!valItem || !valData || !valHora) {
-                alert("Preencha tudo!"); return;
+                alert("Preencha os campos obrigatórios!"); return;
             }
 
             const tx = db_local.transaction("agendamentos", "readwrite");
             const store = tx.objectStore("agendamentos");
-            const addReq = store.add({ item: valItem, data: valData, hora: valHora });
+            const addReq = store.add({ item: valItem, data: valData, hora: valHora, obs: valObs });
 
             addReq.onsuccess = () => {
                 limparFormulario();
                 atualizarLista();
-                window.sincronizarComNuvem(); // Sincroniza logo após salvar
+                window.sincronizarComNuvem();
             };
             addReq.onerror = () => alert("Conflito de horário!");
         };
@@ -194,8 +205,16 @@
                 if (cursor) {
                     const div = document.createElement('div');
                     div.className = 'item-agendado';
+                    
+                    const dataBR = formatarDataBR(cursor.value.data);
+                    const obsHtml = cursor.value.obs ? `<span class="obs-texto">Obs: ${cursor.value.obs}</span>` : "";
+
                     div.innerHTML = `
-                        <div><strong>${cursor.value.item}</strong><br>${cursor.value.data} às ${cursor.value.hora}</div>
+                        <div class="info-texto">
+                            <strong>${cursor.value.item}</strong><br>
+                            <span>📅 ${dataBR} às ${cursor.value.hora}</span>
+                            ${obsHtml}
+                        </div>
                         <button class="btn-excluir" onclick="deletarItem(${cursor.value.id})">Excluir</button>
                     `;
                     container.appendChild(div);
@@ -217,19 +236,18 @@
             document.getElementById('item').value = "";
             document.getElementById('data').value = "";
             document.getElementById('hora').value = "";
+            document.getElementById('obs').value = "";
         }
 
-        // --- MONITOR DE USUÁRIO ---
         onAuthStateChanged(auth, (user) => {
             const btnLogin = document.getElementById('btn-login');
             const btnLogout = document.getElementById('btn-logout');
             const userInfo = document.getElementById('user-info');
-
             if (user) {
                 btnLogin.style.display = 'none';
                 btnLogout.style.display = 'block';
                 userInfo.innerText = "Logado como: " + user.displayName;
-                window.baixarDaNuvem(user); // Baixa os dados ao logar
+                window.baixarDaNuvem(user);
             } else {
                 btnLogin.style.display = 'block';
                 btnLogout.style.display = 'none';
